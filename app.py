@@ -13,9 +13,22 @@ app.register_blueprint(auth_bp)
 def home():
     return "Placement portal backend"
 
+
+@app.route("/app")
+def serve_frontend():
+    return app.send_static_file("index.html")
+
+
+
+
 from routes.admin import admin_bp
 app.register_blueprint(admin_bp)
 
+from routes.company import company_bp
+app.register_blueprint(company_bp)
+
+from routes.student import student_bp
+app.register_blueprint(student_bp)
 
 with app.app_context():
     db.create_all()
