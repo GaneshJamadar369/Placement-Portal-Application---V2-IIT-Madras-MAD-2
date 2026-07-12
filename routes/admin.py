@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from extensions import db
+from extensions import db, redis_client
 from models import User, CompanyProfile, PlacementDrive, StudentProfile
 from routes.decorator import login_required
 
@@ -61,6 +61,7 @@ def approve_drive(drive_id):
         return {"error": "Drive not found"}, 404
     drive.status = "Approved"
     db.session.commit()
+    redis_client.delete("approved_drives")
     return {"message": "Drive approved"}
 
 @admin_bp.route("/drives/<int:drive_id>/reject", methods=["PATCH"])
@@ -71,6 +72,7 @@ def reject_drive(drive_id):
         return {"error": "Drive not found"}, 404
     drive.status = "Closed"
     db.session.commit()
+    redis_client.delete("approved_drives")
     return {"message": "Drive closed"}
 
 @admin_bp.route("/stats", methods=["GET"])

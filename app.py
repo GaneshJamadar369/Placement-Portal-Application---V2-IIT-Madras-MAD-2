@@ -1,10 +1,15 @@
 from flask import Flask, request
+from flask_mail import Mail
 from extensions import db
 from config import Config
+from celery_app import make_celery
 
 app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)
+
+mail = Mail(app)
+celery = make_celery(app)
 
 from models import User, StudentProfile, CompanyProfile, PlacementDrive, Application
 from routes.auth import auth_bp

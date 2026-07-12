@@ -66,7 +66,10 @@
                 </tbody>
             </table>
 
-            <h4 class="mt-4">My Applications</h4>
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                <h4 class="mb-0">My Applications</h4>
+                <button class="btn btn-outline-primary btn-sm" @click="exportApplications">Export as CSV (email me)</button>
+            </div>
             <table class="table table-striped">
                 <thead><tr><th>Drive</th><th>Company</th><th>Status</th><th>Applied At</th></tr></thead>
                 <tbody>

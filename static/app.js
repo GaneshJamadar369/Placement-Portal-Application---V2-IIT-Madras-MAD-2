@@ -91,6 +91,12 @@ createApp({
             this.loadStudentDashboard();
         },
 
+        async exportApplications() {
+            const res = await fetch("/student/applications/export", { method: "POST" });
+            const data = await res.json();
+            alert(data.message || data.error);
+        },
+
         async loadCompanyDashboard() {
             this.myDrives = await (await fetch("/company/drives")).json();
         },

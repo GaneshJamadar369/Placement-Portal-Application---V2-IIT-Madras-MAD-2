@@ -1,7 +1,8 @@
 import os
+import json
 from flask import Blueprint, request, session
 from werkzeug.utils import secure_filename
-from extensions import db
+from extensions import db, redis_client
 from models import StudentProfile, PlacementDrive, Application, CompanyProfile
 from routes.decorator import login_required
 from sqlalchemy.exc import IntegrityError
@@ -37,19 +38,17 @@ def update_profile():
     db.session.commit()
     return {"message": "Profile updated"}
 
-@student_bp.route("/drives", methods=["GET"])
-@login_required(role="student")
-def get_eligible_drives():
-    student = get_student_profile()
+APPROVED_DRIVES_CACHE_KEY = "approved_drives"
+APPROVED_DRIVES_CACHE_TTL = 60  # seconds
+
+def get_all_approved_drives():
+    cached = redis_client.get(APPROVED_DRIVES_CACHE_KEY)
+    if cached:
+        return json.loads(cached)
 
     drives = PlacementDrive.query.filter_by(status="Approved").all()
     result = []
     for d in drives:
-        if d.eligibility_min_cgpa and student.cgpa < d.eligibility_min_cgpa:
-            continue
-        if d.eligibility_branch and d.eligibility_branch != student.branch:
-            continue
-
         company = CompanyProfile.query.get(d.company_id)
         result.append({
             "id": d.id,
@@ -57,8 +56,27 @@ def get_eligible_drives():
             "company_name": company.company_name,
             "package": d.package,
             "location": d.location,
+            "eligibility_branch": d.eligibility_branch,
+            "eligibility_min_cgpa": d.eligibility_min_cgpa,
             "deadline": str(d.deadline) if d.deadline else None
         })
+
+    redis_client.setex(APPROVED_DRIVES_CACHE_KEY, APPROVED_DRIVES_CACHE_TTL, json.dumps(result))
+    return result
+
+@student_bp.route("/drives", methods=["GET"])
+@login_required(role="student")
+def get_eligible_drives():
+    student = get_student_profile()
+    all_drives = get_all_approved_drives()
+
+    result = []
+    for d in all_drives:
+        if d["eligibility_min_cgpa"] and student.cgpa < d["eligibility_min_cgpa"]:
+            continue
+        if d["eligibility_branch"] and d["eligibility_branch"] != student.branch:
+            continue
+        result.append(d)
     return result
 
 @student_bp.route("/applications", methods=["POST"])
@@ -132,4 +150,14 @@ def upload_resume():
     db.session.commit()
 
     return {"message": "Resume uploaded", "path": filepath}
+
+
+@student_bp.route("/applications/export", methods=["POST"])
+@login_required(role="student")
+def export_applications():
+    from tasks import export_applications_csv
+    student = get_student_profile()
+
+    task = export_applications_csv.delay(student.id)
+    return {"message": "Export started, you'll be notified by email when ready", "task_id": task.id}
 
