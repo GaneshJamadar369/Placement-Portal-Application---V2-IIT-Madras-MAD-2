@@ -3,6 +3,7 @@ from extensions import db
 from models import User, StudentProfile, CompanyProfile
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from notifications import notify_all_admins
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -43,6 +44,9 @@ def register():
     db.session.add(profile)
     db.session.commit()
 
+    if role == "company":
+        notify_all_admins(f"New company registered: {profile.company_name} — awaiting approval")
+
     return {"message": "Registered successfully"}
 
 
@@ -69,3 +73,16 @@ def login():
 def logout():
     session.clear()
     return {"message": "Logged out"}
+
+
+@auth_bp.route("/me", methods=["GET"])
+def me():
+    if "user_id" not in session:
+        return {"logged_in": False}
+
+    user = User.query.get(session["user_id"])
+    if not user or user.status != "Active":
+        session.clear()
+        return {"logged_in": False}
+
+    return {"logged_in": True, "role": user.role, "name": user.name, "email": user.email}

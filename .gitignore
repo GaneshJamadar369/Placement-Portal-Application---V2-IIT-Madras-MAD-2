@@ -6,3 +6,4 @@ uploads/
 exports/
 *.log
 .env
+celerybeat-schedule*

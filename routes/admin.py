@@ -1,7 +1,9 @@
+import redis
 from flask import Blueprint, request
 from extensions import db, redis_client
 from models import User, CompanyProfile, PlacementDrive, StudentProfile
 from routes.decorator import login_required
+from notifications import notify_user
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -27,6 +29,7 @@ def approve_company(company_id):
         return {"error": "Company not found"}, 404
     company.approval_status = "Approved"
     db.session.commit()
+    notify_user(company.user_id, "Your company has been approved. You can now create placement drives.")
     return {"message": "Company approved"}
 
 @admin_bp.route("/companies/<int:company_id>/reject", methods=["PATCH"])
@@ -37,6 +40,7 @@ def reject_company(company_id):
         return {"error": "Company not found"}, 404
     company.approval_status = "Rejected"
     db.session.commit()
+    notify_user(company.user_id, "Your company registration was rejected. Contact admin@placement.com for details.")
     return {"message": "Company rejected"}
 @admin_bp.route("/drives/pending", methods=["GET"])
 @login_required(role="admin")
@@ -53,6 +57,28 @@ def get_pending_drives():
         })
     return result
 
+@admin_bp.route("/drives", methods=["GET"])
+@login_required(role="admin")
+def get_all_drives():
+    search = request.args.get("search", "")
+    query = PlacementDrive.query
+    if search:
+        query = query.filter(PlacementDrive.title.ilike(f"%{search}%"))
+
+    drives = query.all()
+    result = []
+    for d in drives:
+        company = CompanyProfile.query.get(d.company_id)
+        result.append({
+            "id": d.id,
+            "title": d.title,
+            "company_name": company.company_name if company else None,
+            "status": d.status,
+            "package": d.package,
+            "deadline": str(d.deadline) if d.deadline else None
+        })
+    return result
+
 @admin_bp.route("/drives/<int:drive_id>/approve", methods=["PATCH"])
 @login_required(role="admin")
 def approve_drive(drive_id):
@@ -61,7 +87,15 @@ def approve_drive(drive_id):
         return {"error": "Drive not found"}, 404
     drive.status = "Approved"
     db.session.commit()
-    redis_client.delete("approved_drives")
+    try:
+        redis_client.delete("approved_drives")
+    except redis.exceptions.RedisError:
+        pass  # Cache invalidation is best-effort; the stale cache will expire via its TTL anyway
+
+    company = CompanyProfile.query.get(drive.company_id)
+    if company:
+        notify_user(company.user_id, f"Your drive '{drive.title}' has been approved and is now visible to students.")
+
     return {"message": "Drive approved"}
 
 @admin_bp.route("/drives/<int:drive_id>/reject", methods=["PATCH"])
@@ -72,7 +106,15 @@ def reject_drive(drive_id):
         return {"error": "Drive not found"}, 404
     drive.status = "Closed"
     db.session.commit()
-    redis_client.delete("approved_drives")
+    try:
+        redis_client.delete("approved_drives")
+    except redis.exceptions.RedisError:
+        pass  # Cache invalidation is best-effort; the stale cache will expire via its TTL anyway
+
+    company = CompanyProfile.query.get(drive.company_id)
+    if company:
+        notify_user(company.user_id, f"Your drive '{drive.title}' was rejected/closed by the admin.")
+
     return {"message": "Drive closed"}
 
 @admin_bp.route("/stats", methods=["GET"])

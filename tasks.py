@@ -92,7 +92,7 @@ def export_applications_csv(student_id):
 
     with open(filepath, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Student ID", "Company Name", "Drive Title", "Status", "Applied At"])
+        writer.writerow(["Student ID", "Company Name", "Drive Title", "Status", "Dates"])
 
         for a in applications:
             drive = PlacementDrive.query.get(a.drive_id)
